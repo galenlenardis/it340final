@@ -1,0 +1,16 @@
+/var/log/squid/access.log {
+               weekly
+               rotate 5
+               copytruncate
+               compress
+               notifempty
+               missingok
+}
+/var/log/squid/cache.log {
+               weekly
+               rotate 5
+               copytruncate
+               compress
+               notifempty
+               missingok
+}

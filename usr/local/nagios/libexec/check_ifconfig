@@ -1,0 +1,140 @@
+#!/bin/bash
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
+PROGNAME=`basename $0`
+VERSION="version 0.93"
+AUTHOR="by Radu MARINESCU radumar1001@yahoo.com"
+#############################
+# Program paths. If left empty the script tries to find the programs
+# in the PATH. Fill in the correct paths only if needed.
+#############################
+#usually /bin/grep or /usr/bin/grep
+GREP=""
+#usually /sbin/ifconfig
+IFCONFIG=""
+#usually /bin/sed
+SED=""
+#############################
+
+if [ ${#GREP} == 0 ] #the variable GREP is not defined; trying to find grep in the PATH
+then
+	GREP=`which grep 2>&1`
+	GREP_EXISTS=$?
+	if [ "$GREP_EXISTS" != 0 ] || [ ${#GREP} == 0 ] #grep is not in the PATH or the variable GREP is empty
+	then
+		echo "Error! Can't find grep."
+		exit 3
+	fi	
+fi
+
+if [ ${#IFCONFIG} == 0 ] #the variable IFCONFIG is not defined; trying to find ifconfig in the PATH
+then
+	IFCONFIG=`which ifconfig 2>&1`
+	IFCONFIG_EXISTS=$?
+	if [ "$IFCONFIG_EXISTS" != 0 ] || [ ${#IFCONFIG} == 0 ] #ifconfig is not in the PATH or the variable IFCONFIG is empty
+	then
+		echo "Error! Can't find ifconfig."
+		exit 3
+	fi	
+fi
+
+if [ ${#SED} == 0 ] #the variable SED is not defined; trying to find sed in the PATH
+then
+	SED=`which sed 2>&1`
+	SED_EXISTS=$?
+	if [ "$SED_EXISTS" != 0 ] || [ ${#SED} == 0 ] #sed is not in the PATH or the variable SED is empty
+	then
+		echo "Error! Can't find sed."
+		exit 3
+	fi	
+fi
+#############################
+
+print_version() {
+    echo "$VERSION $AUTHOR"
+}
+
+print_help() {
+print_version $PROGNAME $VERSION
+echo ""
+echo "$PROGNAME is a Nagios plugin to network Ethernet interfaces on "
+echo "Linux platforms. It uses the output of ifconfig and reports the "
+echo "status of the network interface and the following parameters "
+echo "as performance data: RX bytes, TX bytes, RX packets, TX packets, "
+echo "RX errors and TX errors."
+echo ""
+echo "$PROGNAME [-v] [-h] [-i dev]"
+echo ""
+echo "Options:"
+echo "  --version|-v)"
+echo "    prints the program version"
+echo "  --help|-h)"
+echo "    prints this help information"
+echo "  --interface|-i)"
+echo "    specifies the network interface to check"
+exit 3
+}
+
+if [ $# -lt 1 ]; then
+    print_help
+    exit 3
+fi
+
+while test -n "$1"; do
+    case "$1" in
+        --help|-h)
+            print_help
+            exit 3
+            ;;
+        --version|-v)
+            print_version $PROGNAME $VERSION
+            exit 3
+            ;;
+        --interface|-i)
+            iface=$2
+            shift
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            print_help
+            exit 3
+            ;;
+    esac
+    shift
+done
+
+ETH_DATA=`$IFCONFIG $iface 2>&1`
+ETH_EXISTS=$?
+if [ "$ETH_EXISTS" != 0 ]
+then
+    echo "Error! Can't read the status of $iface"
+    exit 3
+fi
+
+echo "$ETH_DATA" | $GREP "RUNNING" > /dev/null
+ETH_UP=$?
+
+RXTXBytes=`echo "$ETH_DATA" | $GREP "RX bytes" | $SED 's/^[ ]*RX bytes:\([0-9]\+\).*TX bytes:\([0-9]\+\).*$/RX_Bytes=\1B;;;; TX Bytes=\2B;;;;/'`
+RXPackets=`echo "$ETH_DATA" | $GREP "RX packets" | $SED 's/^[ ]*RX packets:\([0-9]\+\)[ ]*errors:\([0-9]\+\).*$/RX_packets=\1;;;; RX_errors=\2;;;;/'`
+TXPackets=`echo "$ETH_DATA" | $GREP "TX packets" | $SED 's/^[ ]*TX packets:\([0-9]\+\)[ ]*errors:\([0-9]\+\).*$/TX_packets=\1;;;; TX_errors=\2;;;;/'`
+
+if [ "$ETH_UP" == "0" ]
+then
+    echo -ne "$iface RUNNING | $RXTXBytes $RXPackets $TXPackets\n"
+    exit 0
+else
+    echo -ne "$iface NOT Running! | $RXTXBytes $RXPackets $TXPackets\n"
+    exit 2
+fi
